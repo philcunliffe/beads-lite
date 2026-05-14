@@ -11,7 +11,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.37.0
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/dolthub/driver v1.88.1
-	github.com/go-sql-driver/mysql v1.9.3
+	github.com/go-sql-driver/mysql v1.10.0
 	github.com/olebedev/when v1.1.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
@@ -30,6 +30,7 @@ require (
 	golang.org/x/sys v0.43.0
 	golang.org/x/term v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
+	modernc.org/sqlite v1.50.1
 	rsc.io/script v0.0.2
 )
 
@@ -45,7 +46,6 @@ require (
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.50.1 // indirect
 )
 
 require (
@@ -60,7 +60,7 @@ require (
 	cloud.google.com/go/monitoring v1.24.2 // indirect
 	cloud.google.com/go/storage v1.50.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
-	filippo.io/edwards25519 v1.1.1 // indirect
+	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/AlekSi/pointer v1.0.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.13.1 // indirect
