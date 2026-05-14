@@ -141,6 +141,16 @@ func (c *Config) Save(beadsDir string) error {
 }
 
 func (c *Config) DatabasePath(beadsDir string) string {
+	if c.GetBackend() == BackendSQLite {
+		if filepath.IsAbs(c.Database) {
+			return c.Database
+		}
+		if c.Database == "" {
+			return filepath.Join(beadsDir, "beads.sqlite3")
+		}
+		return filepath.Join(beadsDir, c.Database)
+	}
+
 	// Check for custom dolt data directory (absolute path on a faster filesystem).
 	// This is useful on WSL where .beads/ lives on NTFS (slow 9P mount) but
 	// dolt data can be placed on native ext4 for 5-10x I/O speedup.
@@ -181,7 +191,8 @@ func (c *Config) GetStaleClosedIssuesDays() int {
 
 // Backend constants
 const (
-	BackendDolt = "dolt"
+	BackendDolt   = "dolt"
+	BackendSQLite = "sqlite"
 )
 
 // BackendCapabilities describes behavioral constraints for a storage backend.
@@ -201,7 +212,10 @@ type BackendCapabilities struct {
 // CapabilitiesForBackend returns capabilities for a backend string.
 // Dolt is the only supported backend. Returns SingleProcessOnly=true by default;
 // use Config.GetCapabilities() to properly handle server mode.
-func CapabilitiesForBackend(_ string) BackendCapabilities {
+func CapabilitiesForBackend(backend string) BackendCapabilities {
+	if backend == BackendSQLite {
+		return BackendCapabilities{SingleProcessOnly: false}
+	}
 	return BackendCapabilities{SingleProcessOnly: true}
 }
 
@@ -216,8 +230,11 @@ func (c *Config) GetCapabilities() BackendCapabilities {
 	return CapabilitiesForBackend(backend)
 }
 
-// GetBackend returns the backend type. Always returns "dolt".
+// GetBackend returns the configured backend type.
 func (c *Config) GetBackend() string {
+	if strings.EqualFold(strings.TrimSpace(c.Backend), BackendSQLite) {
+		return BackendSQLite
+	}
 	return BackendDolt
 }
 

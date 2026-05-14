@@ -29,9 +29,9 @@ func GetNextChildIDTx(ctx context.Context, tx *sql.Tx, parentID string) (string,
 	// for non-numeric ID suffixes (see GH#2721).
 	rows, err := tx.QueryContext(ctx, `
 		SELECT id FROM issues
-		WHERE id LIKE CONCAT(?, '.%')
-		  AND id NOT LIKE CONCAT(?, '.%.%')
-	`, parentID, parentID)
+		WHERE id LIKE ?
+		  AND id NOT LIKE ?
+	`, parentID+".%", parentID+".%.%")
 	if err != nil {
 		return "", fmt.Errorf("get next child ID: query existing children: %w", err)
 	}
@@ -53,10 +53,7 @@ func GetNextChildIDTx(ctx context.Context, tx *sql.Tx, parentID string) (string,
 
 	nextChild := lastChild + 1
 
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO child_counters (parent_id, last_child) VALUES (?, ?)
-		ON DUPLICATE KEY UPDATE last_child = ?
-	`, parentID, nextChild, nextChild); err != nil {
+	if _, err := tx.ExecContext(ctx, setChildCounterSQL(), parentID, nextChild, nextChild); err != nil {
 		return "", fmt.Errorf("get next child ID: update counter: %w", err)
 	}
 

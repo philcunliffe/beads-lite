@@ -1,0 +1,111 @@
+//go:build sqlite_lite
+
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+
+	"github.com/steveyegge/beads/internal/storage"
+	"github.com/steveyegge/beads/internal/storage/issueops"
+	"github.com/steveyegge/beads/internal/types"
+)
+
+// ClaimIssue atomically claims an issue using compare-and-swap semantics.
+// Delegates SQL work to issueops; SQLite auto-commits the transaction.
+func (s *Store) ClaimIssue(ctx context.Context, id string, actor string) error {
+	return s.withConn(ctx, true, func(regularTx, ignoredTx *sql.Tx) error {
+		_, err := issueops.ClaimIssueInTx(ctx, regularTx, id, actor)
+		return err
+	})
+}
+
+// ClaimReadyIssue atomically claims the first ready issue matching filter.
+func (s *Store) ClaimReadyIssue(ctx context.Context, filter types.WorkFilter, actor string) (*types.Issue, error) {
+	var claimed *types.Issue
+	err := s.withConn(ctx, true, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		claimed, err = issueops.ClaimReadyIssueInTx(ctx, regularTx, filter, actor, computeBlockedIDsWrapper)
+		return err
+	})
+	return claimed, err
+}
+
+// UpdateIssue updates fields on an issue.
+// Delegates SQL work to issueops; SQLite auto-commits the transaction.
+func (s *Store) UpdateIssue(ctx context.Context, id string, updates map[string]interface{}, actor string) error {
+	// Validate metadata against schema before routing.
+	if rawMeta, ok := updates["metadata"]; ok {
+		metadataStr, err := storage.NormalizeMetadataValue(rawMeta)
+		if err != nil {
+			return fmt.Errorf("invalid metadata: %w", err)
+		}
+		if err := issueops.ValidateMetadataIfConfigured(json.RawMessage(metadataStr)); err != nil {
+			return err
+		}
+	}
+
+	return s.withConn(ctx, true, func(regularTx, ignoredTx *sql.Tx) error {
+		_, err := issueops.UpdateIssueInTx(ctx, regularTx, id, updates, actor)
+		return err
+	})
+}
+
+// ReopenIssue reopens a closed issue, setting status to open and clearing
+// closed_at and defer_until. If reason is non-empty, it is recorded as a comment.
+// Wraps UpdateIssue; SQLite auto-commits the transaction.
+func (s *Store) ReopenIssue(ctx context.Context, id string, reason string, actor string) error {
+	updates := map[string]interface{}{
+		"status":      string(types.StatusOpen),
+		"defer_until": nil,
+	}
+	if err := s.UpdateIssue(ctx, id, updates, actor); err != nil {
+		return err
+	}
+	if reason != "" {
+		if err := s.AddComment(ctx, id, actor, reason); err != nil {
+			return fmt.Errorf("reopen comment: %w", err)
+		}
+	}
+	return nil
+}
+
+// UpdateIssueType changes the issue_type field of an issue.
+// Wraps UpdateIssue; SQLite auto-commits the transaction.
+func (s *Store) UpdateIssueType(ctx context.Context, id string, issueType string, actor string) error {
+	return s.UpdateIssue(ctx, id, map[string]interface{}{"issue_type": issueType}, actor)
+}
+
+// CloseIssue closes an issue with a reason.
+// Delegates SQL work to issueops; SQLite auto-commits the transaction.
+func (s *Store) CloseIssue(ctx context.Context, id string, reason string, actor string, session string) error {
+	return s.withConn(ctx, true, func(regularTx, ignoredTx *sql.Tx) error {
+		_, err := issueops.CloseIssueInTx(ctx, regularTx, id, reason, actor, session)
+		return err
+	})
+}
+
+// IsBlocked checks if an issue is blocked by active dependencies.
+func (s *Store) IsBlocked(ctx context.Context, issueID string) (bool, []string, error) {
+	var blocked bool
+	var blockers []string
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		blocked, blockers, err = issueops.IsBlockedInTx(ctx, regularTx, issueID)
+		return err
+	})
+	return blocked, blockers, err
+}
+
+// GetNewlyUnblockedByClose finds issues that become unblocked when closedIssueID is closed.
+func (s *Store) GetNewlyUnblockedByClose(ctx context.Context, closedIssueID string) ([]*types.Issue, error) {
+	var result []*types.Issue
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		result, err = issueops.GetNewlyUnblockedByCloseInTx(ctx, regularTx, closedIssueID)
+		return err
+	})
+	return result, err
+}

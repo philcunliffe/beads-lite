@@ -1,0 +1,96 @@
+//go:build sqlite_lite
+
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+
+	"github.com/steveyegge/beads/internal/storage/issueops"
+	"github.com/steveyegge/beads/internal/types"
+)
+
+func (s *Store) SearchIssues(ctx context.Context, query string, filter types.IssueFilter) ([]*types.Issue, error) {
+	var result []*types.Issue
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		result, err = issueops.SearchIssuesInTx(ctx, regularTx, query, filter)
+		return err
+	})
+	return result, err
+}
+
+func (s *Store) ListWisps(ctx context.Context, filter types.WispFilter) ([]*types.Issue, error) {
+	issueFilter := issueops.WispFilterToIssueFilter(filter)
+	var result []*types.Issue
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		result, err = issueops.SearchIssuesInTx(ctx, ignoredTx, "", issueFilter)
+		return err
+	})
+	return result, err
+}
+
+func (s *Store) GetLabelsForIssues(ctx context.Context, issueIDs []string) (map[string][]string, error) {
+	var result map[string][]string
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		result, err = issueops.GetLabelsForIssuesInTx(ctx, regularTx, issueIDs)
+		return err
+	})
+	return result, err
+}
+
+func (s *Store) GetCommentCounts(ctx context.Context, issueIDs []string) (map[string]int, error) {
+	var result map[string]int
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		result, err = issueops.GetCommentCountsInTx(ctx, regularTx, issueIDs)
+		return err
+	})
+	return result, err
+}
+
+func (s *Store) GetAllDependencyRecords(ctx context.Context) (map[string][]*types.Dependency, error) {
+	var result map[string][]*types.Dependency
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		result, err = issueops.GetAllDependencyRecordsInTx(ctx, regularTx)
+		return err
+	})
+	return result, err
+}
+
+func (s *Store) GetDependencyRecordsForIssues(ctx context.Context, issueIDs []string) (map[string][]*types.Dependency, error) {
+	var result map[string][]*types.Dependency
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		result, err = issueops.GetDependencyRecordsForIssuesInTx(ctx, regularTx, issueIDs)
+		return err
+	})
+	return result, err
+}
+
+func (s *Store) GetDependencyCounts(ctx context.Context, issueIDs []string) (map[string]*types.DependencyCounts, error) {
+	var result map[string]*types.DependencyCounts
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		result, err = issueops.GetDependencyCountsInTx(ctx, regularTx, issueIDs)
+		return err
+	})
+	return result, err
+}
+
+func (s *Store) GetBlockingInfoForIssues(ctx context.Context, issueIDs []string) (
+	blockedByMap map[string][]string,
+	blocksMap map[string][]string,
+	parentMap map[string]string,
+	err error,
+) {
+	err = s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var txErr error
+		blockedByMap, blocksMap, parentMap, txErr = issueops.GetBlockingInfoForIssuesInTx(ctx, regularTx, issueIDs)
+		return txErr
+	})
+	return
+}

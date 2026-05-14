@@ -34,16 +34,7 @@ func AddFederationPeerInTx(ctx context.Context, tx *sql.Tx, peer *storage.Federa
 		return fmt.Errorf("invalid peer name: %w", err)
 	}
 
-	_, err := tx.ExecContext(ctx, `
-		INSERT INTO federation_peers (name, remote_url, username, password_encrypted, sovereignty)
-		VALUES (?, ?, ?, ?, ?)
-		ON DUPLICATE KEY UPDATE
-			remote_url = VALUES(remote_url),
-			username = VALUES(username),
-			password_encrypted = VALUES(password_encrypted),
-			sovereignty = VALUES(sovereignty),
-			updated_at = CURRENT_TIMESTAMP
-	`, peer.Name, peer.RemoteURL, peer.Username, encryptedPwd, peer.Sovereignty)
+	_, err := tx.ExecContext(ctx, upsertFederationPeerSQL(), peer.Name, peer.RemoteURL, peer.Username, encryptedPwd, peer.Sovereignty)
 
 	if err != nil {
 		return fmt.Errorf("add federation peer: %w", err)

@@ -359,18 +359,18 @@ func GetDescendantIDsInTx(ctx context.Context, tx *sql.Tx, rootID string, maxDep
 				%s
 			),
 			descendants(id, depth, path) AS (
-				SELECT issue_id, 1, CONCAT(',', ?, ',', issue_id, ',')
+				SELECT issue_id, 1, %s
 				FROM parent_edges
 				WHERE depends_on_id = ?
 				UNION ALL
-				SELECT e.issue_id, d.depth + 1, CONCAT(d.path, e.issue_id, ',')
+				SELECT e.issue_id, d.depth + 1, %s
 				FROM parent_edges e
 				JOIN descendants d ON e.depends_on_id = d.id
 				WHERE (? <= 0 OR d.depth < ?)
-				  AND LOCATE(CONCAT(',', e.issue_id, ','), d.path) = 0
+				  AND %s
 			)
 			SELECT id, depth FROM descendants WHERE id <> ?
-		`, edgeQuery)
+		`, edgeQuery, descendantPathStartExpr(), descendantPathAppendExpr(), descendantPathContainsExpr())
 
 		rows, err := tx.QueryContext(ctx, query, rootID, rootID, maxDepth, maxDepth, rootID)
 		if err != nil {

@@ -1,3 +1,5 @@
+//go:build !sqlite_lite
+
 package main
 
 import (

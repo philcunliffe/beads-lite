@@ -1,0 +1,151 @@
+//go:build sqlite_lite
+
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+
+	"github.com/steveyegge/beads/internal/config"
+	"github.com/steveyegge/beads/internal/storage"
+	"github.com/steveyegge/beads/internal/storage/issueops"
+	"github.com/steveyegge/beads/internal/types"
+)
+
+func (s *Store) SetConfig(ctx context.Context, key, value string) error {
+	return s.withConn(ctx, true, func(regularTx, ignoredTx *sql.Tx) error {
+		if err := issueops.SetConfigInTx(ctx, regularTx, key, value); err != nil {
+			return err
+		}
+		// Sync normalized tables when config keys change
+		switch key {
+		case "status.custom":
+			if err := issueops.SyncCustomStatusesTable(ctx, regularTx, value); err != nil {
+				return fmt.Errorf("syncing custom_statuses table: %w", err)
+			}
+		case "types.custom":
+			if err := issueops.SyncCustomTypesTable(ctx, regularTx, value); err != nil {
+				return fmt.Errorf("syncing custom_types table: %w", err)
+			}
+		}
+		return nil
+	})
+}
+
+func (s *Store) GetConfig(ctx context.Context, key string) (string, error) {
+	var value string
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		value, err = issueops.GetConfigInTx(ctx, regularTx, key)
+		return err
+	})
+	return value, err
+}
+
+func (s *Store) GetAllConfig(ctx context.Context) (map[string]string, error) {
+	var result map[string]string
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		result, err = issueops.GetAllConfigInTx(ctx, regularTx)
+		return err
+	})
+	return result, err
+}
+
+func (s *Store) GetMetadata(ctx context.Context, key string) (string, error) {
+	var value string
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		value, err = issueops.GetMetadataInTx(ctx, regularTx, key)
+		return err
+	})
+	return value, err
+}
+
+func (s *Store) SetMetadata(ctx context.Context, key, value string) error {
+	return s.withConn(ctx, true, func(regularTx, ignoredTx *sql.Tx) error {
+		return issueops.SetMetadataInTx(ctx, regularTx, key, value)
+	})
+}
+
+func (s *Store) DeleteConfig(ctx context.Context, key string) error {
+	return s.withConn(ctx, true, func(regularTx, ignoredTx *sql.Tx) error {
+		return issueops.DeleteConfigInTx(ctx, regularTx, key)
+	})
+}
+
+func (s *Store) GetCustomStatuses(ctx context.Context) ([]string, error) {
+	var result []string
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		result, err = issueops.GetCustomStatusesTx(ctx, regularTx)
+		return err
+	})
+	return result, err
+}
+
+func (s *Store) GetCustomStatusesDetailed(ctx context.Context) ([]types.CustomStatus, error) {
+	var result []types.CustomStatus
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		result, err = issueops.ResolveCustomStatusesDetailedInTx(ctx, regularTx)
+		return err
+	})
+	return result, err
+}
+
+func (s *Store) GetCustomTypes(ctx context.Context) ([]string, error) {
+	var result []string
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		result, err = issueops.ResolveCustomTypesInTx(ctx, regularTx)
+		return err
+	})
+	return result, err
+}
+
+func (s *Store) SetLocalMetadata(ctx context.Context, key, value string) error {
+	return s.withConn(ctx, true, func(regularTx, ignoredTx *sql.Tx) error {
+		return issueops.SetLocalMetadataInTx(ctx, ignoredTx, key, value)
+	})
+}
+
+func (s *Store) GetLocalMetadata(ctx context.Context, key string) (string, error) {
+	var value string
+	err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		var err error
+		value, err = issueops.GetLocalMetadataInTx(ctx, ignoredTx, key)
+		return err
+	})
+	return value, err
+}
+
+// GetInfraTypes returns the set of infrastructure types that should be routed
+// to the wisps table. Reads from DB config "types.infra", falls back to YAML,
+// then to hardcoded defaults (agent, rig, role, message).
+func (s *Store) GetInfraTypes(ctx context.Context) map[string]bool {
+	var result map[string]bool
+	if err := s.withConn(ctx, false, func(regularTx, ignoredTx *sql.Tx) error {
+		result = issueops.ResolveInfraTypesInTx(ctx, regularTx)
+		return nil
+	}); err != nil || result == nil {
+		// DB unavailable — fall back to YAML then defaults.
+		var typeList []string
+		if yamlTypes := config.GetInfraTypesFromYAML(); len(yamlTypes) > 0 {
+			typeList = yamlTypes
+		} else {
+			typeList = storage.DefaultInfraTypes()
+		}
+		result = make(map[string]bool, len(typeList))
+		for _, t := range typeList {
+			result[t] = true
+		}
+	}
+	return result
+}
+
+// IsInfraTypeCtx returns true if the issue type is an infrastructure type.
+func (s *Store) IsInfraTypeCtx(ctx context.Context, t types.IssueType) bool {
+	return s.GetInfraTypes(ctx)[string(t)]
+}

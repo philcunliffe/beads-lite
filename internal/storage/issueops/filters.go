@@ -134,8 +134,8 @@ func BuildIssueFilterClauses(query string, filter types.IssueFilter, tables Filt
 
 	if filter.ParentID != nil {
 		parentID := *filter.ParentID
-		whereClauses = append(whereClauses, fmt.Sprintf("(id IN (SELECT issue_id FROM %s WHERE type = 'parent-child' AND depends_on_id = ?) OR (id LIKE CONCAT(?, '.%%') AND id NOT IN (SELECT issue_id FROM %s WHERE type = 'parent-child')))", tables.Dependencies, tables.Dependencies))
-		args = append(args, parentID, parentID)
+		whereClauses = append(whereClauses, fmt.Sprintf("(id IN (SELECT issue_id FROM %s WHERE type = 'parent-child' AND depends_on_id = ?) OR (id LIKE ? AND id NOT IN (SELECT issue_id FROM %s WHERE type = 'parent-child')))", tables.Dependencies, tables.Dependencies))
+		args = append(args, parentID, parentID+".%")
 	}
 	if filter.NoParent {
 		whereClauses = append(whereClauses, fmt.Sprintf("id NOT IN (SELECT issue_id FROM %s WHERE type = 'parent-child')", tables.Dependencies))
@@ -271,7 +271,7 @@ func BuildIssueFilterClauses(query string, filter types.IssueFilter, tables Filt
 		if err := storage.ValidateMetadataKey(filter.HasMetadataKey); err != nil {
 			return nil, nil, err
 		}
-		whereClauses = append(whereClauses, "JSON_EXTRACT(metadata, ?) IS NOT NULL")
+		whereClauses = append(whereClauses, jsonPathExistsClause())
 		args = append(args, storage.JSONMetadataPath(filter.HasMetadataKey))
 	}
 	if len(filter.MetadataFields) > 0 {
@@ -284,7 +284,7 @@ func BuildIssueFilterClauses(query string, filter types.IssueFilter, tables Filt
 			if err := storage.ValidateMetadataKey(k); err != nil {
 				return nil, nil, err
 			}
-			whereClauses = append(whereClauses, "JSON_UNQUOTE(JSON_EXTRACT(metadata, ?)) = ?")
+			whereClauses = append(whereClauses, jsonPathEqualsClause())
 			args = append(args, storage.JSONMetadataPath(k), filter.MetadataFields[k])
 		}
 	}

@@ -328,20 +328,12 @@ func updateWispIDInTx(ctx context.Context, tx *sql.Tx, oldID, newID string, issu
 
 // RenameDependencyPrefixInTx updates the prefix in all dependency records.
 func RenameDependencyPrefixInTx(ctx context.Context, tx *sql.Tx, oldPrefix, newPrefix string) error {
-	_, err := tx.ExecContext(ctx, `
-		UPDATE dependencies
-		SET issue_id = CONCAT(?, SUBSTRING(issue_id, LENGTH(?) + 1))
-		WHERE issue_id LIKE CONCAT(?, '%')
-	`, newPrefix, oldPrefix, oldPrefix)
+	_, err := tx.ExecContext(ctx, updateDependencyPrefixSQL("issue_id"), newPrefix, oldPrefix, oldPrefix+"%")
 	if err != nil {
 		return fmt.Errorf("update issue_id prefix in dependencies: %w", err)
 	}
 
-	_, err = tx.ExecContext(ctx, `
-		UPDATE dependencies
-		SET depends_on_id = CONCAT(?, SUBSTRING(depends_on_id, LENGTH(?) + 1))
-		WHERE depends_on_id LIKE CONCAT(?, '%')
-	`, newPrefix, oldPrefix, oldPrefix)
+	_, err = tx.ExecContext(ctx, updateDependencyPrefixSQL("depends_on_id"), newPrefix, oldPrefix, oldPrefix+"%")
 	if err != nil {
 		return fmt.Errorf("update depends_on_id prefix in dependencies: %w", err)
 	}
@@ -422,14 +414,7 @@ func GetRepoMtimeInTx(ctx context.Context, tx *sql.Tx, repoPath string) (int64, 
 
 // SetRepoMtimeInTx upserts the mtime cache for a repo path.
 func SetRepoMtimeInTx(ctx context.Context, tx *sql.Tx, repoPath, jsonlPath string, mtimeNs int64) error {
-	_, err := tx.ExecContext(ctx, `
-		INSERT INTO repo_mtimes (repo_path, jsonl_path, mtime_ns, last_checked)
-		VALUES (?, ?, ?, NOW())
-		ON DUPLICATE KEY UPDATE
-			jsonl_path = VALUES(jsonl_path),
-			mtime_ns = VALUES(mtime_ns),
-			last_checked = NOW()
-	`, repoPath, jsonlPath, mtimeNs)
+	_, err := tx.ExecContext(ctx, upsertRepoMtimeSQL(), repoPath, jsonlPath, mtimeNs)
 	if err != nil {
 		return fmt.Errorf("set repo mtime: %w", err)
 	}

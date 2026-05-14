@@ -79,7 +79,7 @@ func GetReadyWorkInTx(
 	}
 	// Exclude future-deferred issues unless IncludeDeferred is set.
 	if !filter.IncludeDeferred {
-		whereClauses = append(whereClauses, "(defer_until IS NULL OR defer_until <= UTC_TIMESTAMP())")
+		whereClauses = append(whereClauses, fmt.Sprintf("(defer_until IS NULL OR defer_until <= %s)", currentTimestampSQL()))
 	}
 	// Exclude children of future-deferred parents.
 	if !filter.IncludeDeferred {
@@ -120,8 +120,8 @@ func GetReadyWorkInTx(
 		if descErr != nil {
 			return nil, fmt.Errorf("get parent descendants: %w", descErr)
 		}
-		parentClauses := []string{"(id LIKE CONCAT(?, '.%') AND id NOT IN (SELECT issue_id FROM dependencies WHERE type = 'parent-child'))"}
-		args = append(args, parentID)
+		parentClauses := []string{"(id LIKE ? AND id NOT IN (SELECT issue_id FROM dependencies WHERE type = 'parent-child'))"}
+		args = append(args, parentID+".%")
 		for start := 0; start < len(descendantIDs); start += queryBatchSize {
 			end := start + queryBatchSize
 			if end > len(descendantIDs) {
@@ -136,8 +136,8 @@ func GetReadyWorkInTx(
 
 	// Molecule filtering: filter to direct children of the specified molecule.
 	if filter.MoleculeID != "" {
-		whereClauses = append(whereClauses, "(id IN (SELECT issue_id FROM dependencies WHERE type = 'parent-child' AND depends_on_id = ?) OR (id LIKE CONCAT(?, '.%') AND id NOT IN (SELECT issue_id FROM dependencies WHERE type = 'parent-child')))")
-		args = append(args, filter.MoleculeID, filter.MoleculeID)
+		whereClauses = append(whereClauses, "(id IN (SELECT issue_id FROM dependencies WHERE type = 'parent-child' AND depends_on_id = ?) OR (id LIKE ? AND id NOT IN (SELECT issue_id FROM dependencies WHERE type = 'parent-child')))")
+		args = append(args, filter.MoleculeID, filter.MoleculeID+".%")
 	}
 
 	// Metadata existence check.
@@ -145,7 +145,7 @@ func GetReadyWorkInTx(
 		if err := storage.ValidateMetadataKey(filter.HasMetadataKey); err != nil {
 			return nil, err
 		}
-		whereClauses = append(whereClauses, "JSON_EXTRACT(metadata, ?) IS NOT NULL")
+		whereClauses = append(whereClauses, jsonPathExistsClause())
 		args = append(args, "$."+filter.HasMetadataKey)
 	}
 
@@ -160,7 +160,7 @@ func GetReadyWorkInTx(
 			if err := storage.ValidateMetadataKey(k); err != nil {
 				return nil, err
 			}
-			whereClauses = append(whereClauses, "JSON_UNQUOTE(JSON_EXTRACT(metadata, ?)) = ?")
+			whereClauses = append(whereClauses, jsonPathEqualsClause())
 			args = append(args, storage.JSONMetadataPath(k), filter.MetadataFields[k])
 		}
 	}
@@ -200,10 +200,7 @@ func GetReadyWorkInTx(
 	case types.SortPolicyPriority:
 		orderBySQL = "ORDER BY priority ASC, created_at DESC, id ASC"
 	case types.SortPolicyHybrid, "":
-		orderBySQL = `ORDER BY
-			CASE WHEN created_at >= DATE_SUB(NOW(), INTERVAL 48 HOUR) THEN 0 ELSE 1 END ASC,
-			CASE WHEN created_at >= DATE_SUB(NOW(), INTERVAL 48 HOUR) THEN priority ELSE 999 END ASC,
-			created_at ASC, id ASC`
+		orderBySQL = "ORDER BY" + recentIssueSortClause() + "created_at ASC, id ASC"
 	default:
 		orderBySQL = "ORDER BY priority ASC, created_at DESC, id ASC"
 	}
@@ -273,10 +270,10 @@ func GetReadyWorkInTx(
 // future defer_until. Works within an existing transaction.
 func getChildrenOfDeferredParentsInTx(ctx context.Context, tx *sql.Tx) ([]string, error) {
 	// Step 1: Get IDs of issues with future defer_until.
-	deferredRows, err := tx.QueryContext(ctx, `
+	deferredRows, err := tx.QueryContext(ctx, fmt.Sprintf(`
 		SELECT id FROM issues
-		WHERE defer_until IS NOT NULL AND defer_until > UTC_TIMESTAMP()
-	`)
+		WHERE defer_until IS NOT NULL AND defer_until > %s
+	`, currentTimestampSQL()))
 	if err != nil {
 		return nil, fmt.Errorf("deferred parents: get deferred issues: %w", err)
 	}

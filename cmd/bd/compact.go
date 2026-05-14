@@ -927,7 +927,38 @@ func init() {
 	compactCmd.Flags().StringVar(&compactSummary, "summary", "", "Path to summary file (use '-' for stdin)")
 	compactCmd.Flags().StringVar(&compactActor, "actor", "agent", "Actor name for audit trail")
 	compactCmd.Flags().IntVar(&compactLimit, "limit", 0, "Limit number of candidates (0 = no limit)")
-	compactCmd.Flags().BoolVar(&compactDolt, "dolt", false, "Dolt mode: run Dolt garbage collection on .beads/dolt")
+	if sqliteLiteBuild {
+		compactCmd.Long = `Compact old closed issues using semantic summarization.
+
+Compaction reduces database size by summarizing closed issues that are no longer
+actively referenced. This is permanent graceful decay - original content is discarded.
+
+Modes:
+  - Analyze: Export candidates for agent review (no API key needed)
+  - Apply: Accept agent-provided summary (no API key needed)
+  - Auto: AI-powered compaction (requires ANTHROPIC_API_KEY or ai.api_key, legacy)
+
+Tiers:
+  - Tier 1: Semantic compression (30 days closed, 70% reduction)
+  - Tier 2: Ultra compression (90 days closed, 95% reduction)
+
+Examples:
+  # Agent-driven workflow (recommended)
+  bd compact --analyze --json              # Get candidates with full content
+  bd compact --apply --id bd-42 --summary summary.txt
+  bd compact --apply --id bd-42 --summary - < summary.txt
+
+  # Legacy AI-powered workflow
+  bd compact --auto --dry-run              # Preview candidates
+  bd compact --auto --all                  # Compact all eligible issues
+  bd compact --auto --id bd-42             # Compact specific issue
+
+  # Statistics
+  bd compact --stats                       # Show statistics
+`
+	} else {
+		compactCmd.Flags().BoolVar(&compactDolt, "dolt", false, "Dolt mode: run Dolt garbage collection on .beads/dolt")
+	}
 
 	// Note: compactCmd is added to adminCmd in admin.go
 }

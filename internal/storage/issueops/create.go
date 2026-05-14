@@ -260,11 +260,7 @@ func PersistLabels(ctx context.Context, regularTx, ignoredTx *sql.Tx, issue *typ
 	}
 	for _, label := range issue.Labels {
 		//nolint:gosec // G201: table is determined by ephemeral flag
-		_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-			INSERT INTO %s (issue_id, label)
-			VALUES (?, ?)
-			ON DUPLICATE KEY UPDATE label = label
-		`, labelTable), issue.ID, label)
+		_, err := tx.ExecContext(ctx, upsertLabelSQL(labelTable), issue.ID, label)
 		if err != nil {
 			return fmt.Errorf("failed to insert label %q for %s: %w", label, issue.ID, err)
 		}
@@ -343,11 +339,7 @@ func PersistDependencies(ctx context.Context, regularTx, ignoredTx *sql.Tx, issu
 				createdAt = time.Now().UTC()
 			}
 			//nolint:gosec // G201: table is determined by isWisp flag
-			_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-				INSERT INTO %s (issue_id, depends_on_id, type, created_by, created_at)
-				VALUES (?, ?, ?, ?, ?)
-				ON DUPLICATE KEY UPDATE type = type
-			`, depTable), dep.IssueID, dep.DependsOnID, dep.Type, actor, createdAt)
+			_, err := tx.ExecContext(ctx, upsertDependencyNoopSQL(depTable), dep.IssueID, dep.DependsOnID, dep.Type, actor, createdAt)
 			if err != nil {
 				return fmt.Errorf("failed to insert dependency %s -> %s: %w", dep.IssueID, dep.DependsOnID, err)
 			}
@@ -371,10 +363,7 @@ func ReconcileChildCounters(ctx context.Context, regularTx, ignoredTx *sql.Tx, i
 		if err := regularTx.QueryRowContext(ctx, "SELECT 1 FROM issues WHERE id = ?", parentID).Scan(&parentExists); err != nil {
 			continue // parent not in issues table — skip counter
 		}
-		_, err := regularTx.ExecContext(ctx, `
-			INSERT INTO child_counters (parent_id, last_child) VALUES (?, ?)
-			ON DUPLICATE KEY UPDATE last_child = GREATEST(last_child, ?)
-		`, parentID, maxChild, maxChild)
+		_, err := regularTx.ExecContext(ctx, upsertChildCounterMaxSQL(), parentID, maxChild, maxChild)
 		if err != nil {
 			return fmt.Errorf("failed to reconcile child counter for %s: %w", parentID, err)
 		}

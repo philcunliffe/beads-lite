@@ -428,6 +428,12 @@ func findLocalBeadsDir() string {
 func findDatabaseInBeadsDir(beadsDir string, _ bool) string {
 	// Check for metadata.json first (single source of truth)
 	if cfg, err := configfile.Load(beadsDir); err == nil && cfg != nil {
+		if cfg.GetBackend() == configfile.BackendSQLite {
+			sqlitePath := cfg.DatabasePath(beadsDir)
+			if info, err := os.Stat(sqlitePath); err == nil && !info.IsDir() {
+				return sqlitePath
+			}
+		}
 		// For Dolt server mode, database is on the server - no local directory required
 		if cfg.IsDoltServerMode() {
 			return cfg.DatabasePath(beadsDir)

@@ -144,7 +144,7 @@ func AddLabelInTx(ctx context.Context, tx *sql.Tx, labelTable, eventTable, issue
 		}
 	}
 	//nolint:gosec // G201: labelTable is from WispTableRouting ("labels" or "wisp_labels")
-	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`INSERT IGNORE INTO %s (issue_id, label) VALUES (?, ?)`, labelTable), issueID, label); err != nil {
+	if _, err := tx.ExecContext(ctx, insertLabelSQL(labelTable), issueID, label); err != nil {
 		return fmt.Errorf("add label: %w", err)
 	}
 	comment := "Added label: " + label

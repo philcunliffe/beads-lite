@@ -43,48 +43,7 @@ func TableRouting(issue *types.Issue) (issueTable, eventTable string) {
 //
 //nolint:gosec // G201: table is a hardcoded constant ("issues" or "wisps")
 func InsertIssueIntoTable(ctx context.Context, tx *sql.Tx, table string, issue *types.Issue) error {
-	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-		INSERT INTO %s (
-			id, content_hash, title, description, design, acceptance_criteria, notes,
-			status, priority, issue_type, assignee, estimated_minutes,
-			created_at, created_by, owner, updated_at, started_at, closed_at, external_ref, spec_id,
-			compaction_level, compacted_at, compacted_at_commit, original_size,
-			sender, ephemeral, no_history, wisp_type, pinned, is_template,
-			mol_type, work_type, source_system, source_repo, close_reason,
-			event_kind, actor, target, payload,
-			await_type, await_id, timeout_ns, waiters,
-			due_at, defer_until, metadata
-		) VALUES (
-			?, ?, ?, ?, ?, ?, ?,
-			?, ?, ?, ?, ?,
-			?, ?, ?, ?, ?, ?, ?, ?,
-			?, ?, ?, ?,
-			?, ?, ?, ?, ?, ?,
-			?, ?, ?, ?, ?,
-			?, ?, ?, ?,
-			?, ?, ?, ?,
-			?, ?, ?
-		)
-		ON DUPLICATE KEY UPDATE
-			content_hash = VALUES(content_hash),
-			title = VALUES(title),
-			description = VALUES(description),
-			design = VALUES(design),
-			acceptance_criteria = VALUES(acceptance_criteria),
-			notes = VALUES(notes),
-			status = VALUES(status),
-			priority = VALUES(priority),
-			issue_type = VALUES(issue_type),
-			assignee = VALUES(assignee),
-			estimated_minutes = VALUES(estimated_minutes),
-			updated_at = VALUES(updated_at),
-			started_at = VALUES(started_at),
-			closed_at = VALUES(closed_at),
-			external_ref = VALUES(external_ref),
-			source_repo = VALUES(source_repo),
-			close_reason = VALUES(close_reason),
-			metadata = VALUES(metadata)
-	`, table),
+	_, err := tx.ExecContext(ctx, insertIssueSQL(table),
 		issue.ID, issue.ContentHash, issue.Title, issue.Description, issue.Design, issue.AcceptanceCriteria, issue.Notes,
 		issue.Status, issue.Priority, issue.IssueType, NullString(issue.Assignee), NullInt(issue.EstimatedMinutes),
 		issue.CreatedAt, issue.CreatedBy, issue.Owner, issue.UpdatedAt, issue.StartedAt, issue.ClosedAt, NullStringPtr(issue.ExternalRef), issue.SpecID,
@@ -224,7 +183,7 @@ func SeedCounterFromExistingIssuesTx(ctx context.Context, tx *sql.Tx, prefix str
 	}
 
 	// Find max numeric suffix among existing issues
-	rows, err := tx.QueryContext(ctx, `SELECT id FROM issues WHERE id LIKE CONCAT(?, '-%')`, prefix)
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM issues WHERE id LIKE ?`, prefix+"-%")
 	if err != nil {
 		return fmt.Errorf("failed to scan existing issues for prefix %q: %w", prefix, err)
 	}
@@ -266,9 +225,9 @@ func GetAdaptiveIDLengthTx(ctx context.Context, tx *sql.Tx, table, prefix string
 	err := tx.QueryRowContext(ctx, fmt.Sprintf(`
 		SELECT COUNT(*)
 		FROM %s
-		WHERE id LIKE CONCAT(?, '-%%')
-		  AND INSTR(SUBSTRING(id, LENGTH(?) + 2), '.') = 0
-	`, table), prefix, prefix).Scan(&count)
+		WHERE id LIKE ?
+		  AND id NOT LIKE ?
+	`, table), prefix+"-%", prefix+"-%.%").Scan(&count)
 	if err != nil {
 		return 6, err
 	}

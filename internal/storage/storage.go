@@ -33,6 +33,11 @@ var ErrNotInitialized = errors.New("database not initialized")
 // ErrPrefixMismatch is returned when an issue ID does not match the configured prefix.
 var ErrPrefixMismatch = errors.New("prefix mismatch")
 
+// ErrUnsupportedCapability is returned by storage backends that intentionally
+// do not implement optional capabilities such as history, remotes, sync, or
+// merge.
+var ErrUnsupportedCapability = errors.New("unsupported storage capability")
+
 // Storage is the interface satisfied by *dolt.DoltStore.
 // Consumers depend on this interface rather than on the concrete type so that
 // alternative implementations (mocks, proxies, etc.) can be substituted.
