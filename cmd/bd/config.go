@@ -31,6 +31,7 @@ Common namespaces:
   - github.*          GitHub integration settings
   - custom.*          Custom integration settings
   - status.*          Issue status configuration
+  - types.*           Issue type configuration
   - doctor.suppress.* Suppress specific bd doctor warnings (GH#1095)
 
 Auto-Export (config.yaml):
@@ -694,7 +695,7 @@ Examples:
 // Keys under custom.* are always accepted (user-extensible).
 var recognizedConfigPrefixes = []string{
 	"export.", "dolt.", "jira.", "linear.", "github.", "custom.",
-	"status.", "doctor.suppress.", "routing.", "sync.", "git.",
+	"status.", "types.", "doctor.suppress.", "routing.", "sync.", "git.",
 	"directory.", "repos.", "external_projects.", "validation.",
 	"hierarchy.", "ai.", "backup.", "federation.",
 }
