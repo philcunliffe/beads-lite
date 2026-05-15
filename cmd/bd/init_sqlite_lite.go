@@ -87,6 +87,9 @@ func init() {
 	initCmd.Flags().Bool("quiet", false, "Suppress non-essential output")
 	initCmd.Flags().Bool("force", false, "Reuse an existing SQLite database")
 	initCmd.Flags().String("from-jsonl", "", "Import issues from a JSONL export after initialization")
+	// Accept (and ignore) the flags gascity's lite-mode init expects.
+	initCmd.Flags().Bool("skip-hooks", false, "Skip installing git hooks (accepted for gascity compatibility; lite mode never installs hooks)")
+	initCmd.Flags().Bool("skip-agents", false, "Skip writing AGENTS.md/CLAUDE.md (accepted for gascity compatibility; lite mode never writes them)")
 	rootCmd.AddCommand(initCmd)
 }
 

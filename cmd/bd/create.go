@@ -15,7 +15,6 @@ import (
 	"github.com/steveyegge/beads/internal/config"
 	"github.com/steveyegge/beads/internal/configfile"
 	"github.com/steveyegge/beads/internal/debug"
-	"github.com/steveyegge/beads/internal/remotecache"
 	"github.com/steveyegge/beads/internal/routing"
 	"github.com/steveyegge/beads/internal/storage"
 	"github.com/steveyegge/beads/internal/storage/dolt"
@@ -353,38 +352,21 @@ var createCmd = &cobra.Command{
 		// Switch to target repo for multi-repo support (bd-6x6g)
 		// When routing to a different repo, we use direct storage access
 		var targetStore storage.DoltStorage
-		var remoteCache *remotecache.Cache // non-nil when routing to a remote URL
 		if repoPath != "." {
-			if remotecache.IsRemoteURL(repoPath) {
-				// Remote URL: pull into cache, open store, push explicitly after create
-				var err error
-				remoteCache, err = remotecache.DefaultCache()
-				if err != nil {
-					FatalError("failed to initialize remote cache: %v", err)
-				}
-				if _, err := remoteCache.Ensure(rootCtx, repoPath); err != nil {
-					FatalError("failed to sync remote %s: %v", repoPath, err)
-				}
-				targetStore, err = remoteCache.OpenStore(rootCtx, repoPath, newDoltStoreFromConfig)
-				if err != nil {
-					FatalError("failed to open remote store: %v", err)
-				}
-			} else {
-				targetBeadsDir := routing.ExpandPath(repoPath)
-				debug.Logf("DEBUG: Routing to target repo: %s\n", targetBeadsDir)
+			targetBeadsDir := routing.ExpandPath(repoPath)
+			debug.Logf("DEBUG: Routing to target repo: %s\n", targetBeadsDir)
 
-				// Ensure target beads directory exists with prefix inheritance
-				if err := ensureBeadsDirForPath(rootCtx, targetBeadsDir, store); err != nil {
-					FatalError("failed to initialize target repo: %v", err)
-				}
+			// Ensure target beads directory exists with prefix inheritance
+			if err := ensureBeadsDirForPath(rootCtx, targetBeadsDir, store); err != nil {
+				FatalError("failed to initialize target repo: %v", err)
+			}
 
-				// Open new store for target repo using factory to respect backend config
-				targetBeadsDirPath := filepath.Join(targetBeadsDir, ".beads")
-				var err error
-				targetStore, err = newDoltStoreFromConfig(rootCtx, targetBeadsDirPath)
-				if err != nil {
-					FatalError("failed to open target store: %v", err)
-				}
+			// Open new store for target repo using factory to respect backend config
+			targetBeadsDirPath := filepath.Join(targetBeadsDir, ".beads")
+			var err error
+			targetStore, err = newDoltStoreFromConfig(rootCtx, targetBeadsDirPath)
+			if err != nil {
+				FatalError("failed to open target store: %v", err)
 			}
 
 			// Close the original store before replacing it (it won't be used anymore)
@@ -689,16 +671,7 @@ var createCmd = &cobra.Command{
 			}
 		}
 
-		// Push to remote if this was a remote-routed create.
-		// Done explicitly (not via defer) because FatalError calls os.Exit,
-		// which skips deferred functions.
-		if remoteCache != nil {
-			if pushErr := remoteCache.Push(rootCtx, repoPath); pushErr != nil {
-				FatalError("failed to push to %s: %v\nThe issue was created locally but not synced to the remote.", repoPath, pushErr)
-			}
-		}
-
-		if jsonOutput {
+if jsonOutput {
 			outputJSON(issue)
 		} else if silent {
 			fmt.Println(issue.ID)

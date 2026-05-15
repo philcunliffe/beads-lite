@@ -252,12 +252,12 @@ func hasRedirectFile(beadsDir string) bool {
 }
 
 // scanSQLiteArtifacts checks for leftover SQLite database files.
-// Only flags SQLite files as artifacts if Dolt is the active backend.
-// If SQLite is still the active backend, beads.db is the live database.
+// In the lite build SQLite is always the active backend, so no live
+// database files are ever flagged as artifacts.
 func scanSQLiteArtifacts(beadsDir string, report *ArtifactReport) {
-	if !IsDoltBackend(beadsDir) {
-		return
-	}
+	_ = beadsDir
+	_ = report
+	return
 
 	entries, err := os.ReadDir(beadsDir)
 	if err != nil {

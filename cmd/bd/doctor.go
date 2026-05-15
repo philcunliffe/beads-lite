@@ -806,7 +806,7 @@ func runDiagnostics(path string) doctorResult {
 	// Don't fail overall check for btrfs NoCOW, just warn
 
 	// GH#1095: Filter out suppressed checks (doctor.suppress.<slug> = true)
-	suppressed := doctor.GetSuppressedChecksWithStore(sharedStore)
+	suppressed := doctor.GetSuppressedChecksWithStore(path, sharedStore)
 	if len(suppressed) > 0 {
 		var suppressedCount int
 		var filtered []doctorCheck

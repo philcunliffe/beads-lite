@@ -9,12 +9,10 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/steveyegge/beads/cmd/bd/doctor"
 	"github.com/steveyegge/beads/internal/beads"
 	"github.com/steveyegge/beads/internal/config"
 	"github.com/steveyegge/beads/internal/git"
-	"github.com/steveyegge/beads/internal/remotecache"
 	"github.com/steveyegge/beads/internal/types"
 )
 
@@ -493,15 +491,11 @@ Checks:
 		// Run the existing doctor config values check
 		doctorCheck := doctor.CheckConfigValues(repoPath)
 
-		// Run additional sync-related validations
-		syncIssues := validateSyncConfig(repoPath)
-
 		// Combine results
 		allIssues := []string{}
 		if doctorCheck.Detail != "" {
 			allIssues = append(allIssues, strings.Split(doctorCheck.Detail, "\n")...)
 		}
-		allIssues = append(allIssues, syncIssues...)
 
 		// Output results
 		if jsonOutput {
@@ -527,65 +521,6 @@ Checks:
 		fmt.Println("\nRun 'bd config set <key> <value>' to fix configuration issues.")
 		os.Exit(1)
 	},
-}
-
-// validateSyncConfig performs additional sync-related config validation
-// beyond what doctor.CheckConfigValues covers.
-func validateSyncConfig(repoPath string) []string {
-	var issues []string
-
-	// Load config.yaml from the resolved workspace so shared worktrees validate
-	// the same config file they actually run with.
-	configPath := filepath.Join(doctor.ResolveBeadsDirForRepo(repoPath), "config.yaml")
-	v := viper.New()
-	v.SetConfigType("yaml")
-	v.SetConfigFile(configPath)
-
-	// Try to read config, but don't error if it doesn't exist
-	if err := v.ReadInConfig(); err != nil {
-		// Config file doesn't exist or is unreadable - nothing to validate
-		return issues
-	}
-
-	// Get config from yaml
-	federationSov := v.GetString("federation.sovereignty")
-	federationRemote := v.GetString("federation.remote")
-
-	// Validate federation.sovereignty
-	if federationSov != "" && !config.IsValidSovereignty(federationSov) {
-		issues = append(issues, fmt.Sprintf("federation.sovereignty: %q is invalid (valid values: %s, or empty for no restriction)", federationSov, strings.Join(config.ValidSovereigntyTiers(), ", ")))
-	}
-
-	// Validate federation.remote is set (required for Dolt sync)
-	if federationRemote == "" {
-		issues = append(issues, "federation.remote: required for Dolt sync")
-	}
-
-	// Strict security validation of remote URL
-	if federationRemote != "" {
-		if err := remotecache.ValidateRemoteURL(federationRemote); err != nil {
-			issues = append(issues, fmt.Sprintf("federation.remote: %s", err))
-		}
-	}
-
-	// Validate against allowed-remote-patterns if configured
-	if federationRemote != "" {
-		patterns := v.GetStringSlice("federation.allowed-remote-patterns")
-		if len(patterns) > 0 {
-			if err := remotecache.ValidateRemoteURLWithPatterns(federationRemote, patterns); err != nil {
-				issues = append(issues, fmt.Sprintf("federation.remote: %s", err))
-			}
-		}
-	}
-
-	return issues
-}
-
-// isValidRemoteURL validates remote URL formats for sync configuration.
-// Uses strict security validation that checks structural correctness,
-// rejects control characters, and validates per-scheme requirements.
-func isValidRemoteURL(rawURL string) bool {
-	return remotecache.ValidateRemoteURL(rawURL) == nil
 }
 
 // findBeadsRepoRoot walks up from the given path to find the repo root (containing .beads)

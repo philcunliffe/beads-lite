@@ -230,12 +230,12 @@ func (c *Config) GetCapabilities() BackendCapabilities {
 	return CapabilitiesForBackend(backend)
 }
 
-// GetBackend returns the configured backend type.
+// GetBackend returns the configured backend type. The lite build is
+// SQLite-only, so any non-SQLite value (including legacy "dolt") is treated
+// as SQLite. We still expose the constants for source compatibility with
+// metadata.json files written by older builds.
 func (c *Config) GetBackend() string {
-	if strings.EqualFold(strings.TrimSpace(c.Backend), BackendSQLite) {
-		return BackendSQLite
-	}
-	return BackendDolt
+	return BackendSQLite
 }
 
 // Dolt mode constants

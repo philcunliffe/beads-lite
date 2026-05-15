@@ -2,94 +2,79 @@ package doctor
 
 import (
 	"context"
-	"os"
+	"sync"
 
-	"github.com/steveyegge/beads/internal/configfile"
 	"github.com/steveyegge/beads/internal/storage/dolt"
 )
 
-// SharedStore holds a single DoltStore open for the duration of a doctor run,
-// preventing the infinite Dolt server restart loop that occurs when each check
-// opens and closes its own store (GH#2636).
-//
-// Usage:
-//
-//	ss := NewSharedStore(path)
-//	defer ss.Close()
-//	store := ss.Store() // may be nil if DB doesn't exist or can't open
-//
-// Check functions that accept a *dolt.DoltStore parameter should use the
-// shared store when available, falling back to opening their own store when
-// called standalone (e.g., from tests or one-off checks).
+// SharedStore lazily opens the SQLite-backed store for the doctor run and
+// keeps a single connection alive across all checks.
 type SharedStore struct {
-	store    *dolt.DoltStore
+	repoPath string
 	beadsDir string
+
+	once   sync.Once
+	openErr error
+	store  *dolt.DoltStore
 }
 
+// NewSharedStore returns a SharedStore rooted at the given repo path.
+func NewSharedStore(repoPath string) *SharedStore {
+	return &SharedStore{
+		repoPath: repoPath,
+		beadsDir: ResolveBeadsDirForRepo(repoPath),
+	}
+}
+
+// Store opens the database on first use and returns the cached store.
+func (s *SharedStore) Store() *dolt.DoltStore {
+	s.once.Do(func() {
+		store, err := dolt.NewFromConfigWithCLIOptions(context.Background(), s.beadsDir, &dolt.Config{ReadOnly: true})
+		if err != nil {
+			s.openErr = err
+			return
+		}
+		s.store = store
+	})
+	return s.store
+}
+
+// Err returns the deferred open error, if any.
+func (s *SharedStore) Err() error {
+	s.Store()
+	return s.openErr
+}
+
+// BeadsDir returns the resolved beads directory.
+func (s *SharedStore) BeadsDir() string {
+	return s.beadsDir
+}
+
+// Close closes the underlying store if one was opened.
+func (s *SharedStore) Close() error {
+	if s.store == nil {
+		return nil
+	}
+	return s.store.Close()
+}
+
+// beadsDirFromSharedStore returns the beads dir tracked by the shared store,
+// falling back to per-path resolution when ss is nil.
 func beadsDirFromSharedStore(path string, ss *SharedStore) string {
-	if beadsDir := sharedStoreBeadsDir(ss); beadsDir != "" {
-		return beadsDir
+	if ss != nil && ss.beadsDir != "" {
+		return ss.beadsDir
 	}
 	return ResolveBeadsDirForRepo(path)
 }
 
+// sharedStoreBeadsDir returns the beads dir that the shared store is rooted at.
 func sharedStoreBeadsDir(ss *SharedStore) string {
-	if ss == nil {
-		return ""
-	}
-	return ss.BeadsDir()
-}
-
-func sharedStoreNeedsLocalDoltDir(beadsDir string) bool {
-	cfg, err := configfile.Load(beadsDir)
-	return err != nil || cfg == nil || !cfg.IsDoltServerMode()
-}
-
-// NewSharedStore opens a single read-only DoltStore for the given repo path.
-// If the database doesn't exist or can't be opened, Store() will return nil.
-// The caller MUST call Close() when done (typically via defer).
-func NewSharedStore(path string) *SharedStore {
-	beadsDir := ResolveBeadsDirForRepo(path)
-	ss := &SharedStore{beadsDir: beadsDir}
-
-	if sharedStoreNeedsLocalDoltDir(beadsDir) {
-		doltPath := getDatabasePath(beadsDir)
-		if _, err := os.Stat(doltPath); os.IsNotExist(err) {
-			return ss // No database, store stays nil
-		}
-	}
-
-	ctx := context.Background()
-	store, err := dolt.NewFromConfigWithOptions(ctx, beadsDir, &dolt.Config{ReadOnly: true})
-	if err != nil {
-		return ss // Can't open, store stays nil
-	}
-
-	ss.store = store
-	return ss
-}
-
-// Store returns the shared DoltStore, or nil if the database couldn't be opened.
-func (ss *SharedStore) Store() *dolt.DoltStore {
-	if ss == nil {
-		return nil
-	}
-	return ss.store
-}
-
-// BeadsDir returns the resolved .beads directory path.
-func (ss *SharedStore) BeadsDir() string {
 	if ss == nil {
 		return ""
 	}
 	return ss.beadsDir
 }
 
-// Close closes the underlying DoltStore. Safe to call multiple times.
-func (ss *SharedStore) Close() {
-	if ss == nil || ss.store == nil {
-		return
-	}
-	_ = ss.store.Close()
-	ss.store = nil
-}
+// sharedStoreNeedsLocalDoltDir is always true in the lite build: the local
+// SQLite file under .beads/ is the only thing the doctor needs to find.
+func sharedStoreNeedsLocalDoltDir(_ string) bool { return true }

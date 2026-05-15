@@ -1,23 +1,19 @@
-# Claude Code Entry Point for Beads
-
-This file is intentionally short. Do not copy workflow, build, storage, or UI
-rules here; those details drift quickly when repeated across agent entrypoints.
+# Claude Code Entry Point for beads-lite
 
 ## Read First
 
+- **Project scope**: [README.md](README.md) — beads-lite drops Dolt, external
+  trackers, multi-repo hydration, and language packages.
 - **Workflow and safety**: [AGENTS.md](AGENTS.md)
-- **Detailed agent operations**: [AGENT_INSTRUCTIONS.md](AGENT_INSTRUCTIONS.md)
 - **Architecture orientation**: [docs/CLAUDE.md](docs/CLAUDE.md)
-- **PR maintenance policy**: [PR_MAINTAINER_GUIDELINES.md](PR_MAINTAINER_GUIDELINES.md)
 
 ## Current Ground Rules
 
 - Run `bd prime` before doing tracked work.
-- Follow `go.mod` and [AGENT_INSTRUCTIONS.md](AGENT_INSTRUCTIONS.md) for build
-  and test commands; do not hard-code toolchain versions here.
-- Beads uses Dolt as the issue database. Use `bd dolt push` / `bd dolt pull`
-  for issue data sync; do not use export/import as a routine git workflow.
-- The CLI Visual Design System lives in
-  [AGENT_INSTRUCTIONS.md](AGENT_INSTRUCTIONS.md#visual-design-system).
-- If this file conflicts with a linked source, trust the linked source and fix
-  this file by removing the duplicate.
+- Build with `make build` (uses the `sqlite_lite` tag, `CGO_ENABLED=0`).
+- The on-disk database is a single SQLite file under `.beads/`. There is no
+  Dolt push/pull, no federation, and no external tracker sync — do not add
+  doc references to those features.
+- The internal/storage/dolt package is a SQLite-only shim retained for source
+  compatibility with the rest of the cmd/bd surface; nothing inside it talks
+  to Dolt.

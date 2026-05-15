@@ -14,6 +14,20 @@ import (
 
 var latestPyPIVersionFetcher = fetchLatestPyPIVersion
 
+// agentDocFiles returns the candidate AI agent documentation files that may
+// reference bd commands. Missing files are ignored downstream.
+func agentDocFiles(repoPath string) []string {
+	if repoPath == "" {
+		repoPath = "."
+	}
+	return []string{
+		filepath.Join(repoPath, "AGENTS.md"),
+		filepath.Join(repoPath, "AGENT_INSTRUCTIONS.md"),
+		filepath.Join(repoPath, "CLAUDE.md"),
+		filepath.Join(repoPath, "CLAUDE.local.md"),
+	}
+}
+
 // CheckClaude returns Claude integration verification as a DoctorCheck.
 // repoPath is the project root directory.
 func CheckClaude(repoPath string) DoctorCheck {
